@@ -31,3 +31,26 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Sensitive Files ###
+# Environment variables and credentials
+.env
+.env.local
+.env.*.local
+application.properties
+application-*.properties
+
+# API Keys and secrets
+*.key
+*.pem
+secrets/
+
+# Log files
+*.log
+runlog.txt
+server.log
+springboot.log
+
+# Node modules and package lock (frontend)
+attendance-frontend/node_modules/
+attendance-frontend/dist/
