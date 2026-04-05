@@ -17,11 +17,14 @@ import com.smartclassroom.dto.CreateTeacherRequest;
 import com.smartclassroom.dto.StudentDTO;
 import com.smartclassroom.dto.UserCreationResponse;
 import com.smartclassroom.entity.Attendance;
+import com.smartclassroom.entity.AttendanceSession;
 import com.smartclassroom.entity.Student;
 import com.smartclassroom.entity.Teacher;
 import com.smartclassroom.entity.User;
 import com.smartclassroom.entity.UserRole;
 import com.smartclassroom.repository.AttendanceRepository;
+import com.smartclassroom.repository.AttendanceSessionRepository;
+import com.smartclassroom.repository.FaceProfileRepository;
 import com.smartclassroom.repository.StudentRepository;
 import com.smartclassroom.repository.TeacherRepository;
 import com.smartclassroom.repository.UserRepository;
@@ -43,6 +46,12 @@ public class AdminService {
 
     @Autowired
     private AuthService authService;
+
+    @Autowired
+    private FaceProfileRepository faceProfileRepository;
+
+    @Autowired
+    private AttendanceSessionRepository attendanceSessionRepository;
 
     // ============ TEACHER MANAGEMENT ============
 
@@ -140,6 +149,17 @@ public class AdminService {
                 .filter(s -> calculateAttendancePercentage(s) >= 75)
                 .count();
         stats.put("goodAttendanceStudents", goodAttendanceCount);
+
+        long lateRecords = attendanceRepository.findAll().stream()
+                .filter(a -> a.getStatus() == com.smartclassroom.entity.AttendanceStatus.LATE)
+                .count();
+        long absentRecords = attendanceRepository.findAll().stream()
+                .filter(a -> a.getStatus() == com.smartclassroom.entity.AttendanceStatus.ABSENT)
+                .count();
+        stats.put("lateRecords", lateRecords);
+        stats.put("absentRecords", absentRecords);
+        stats.put("registeredFaceProfiles", faceProfileRepository.count());
+        stats.put("activeAttendanceSessions", attendanceSessionRepository.findByActiveTrueOrderByStartedAtDesc().size());
 
         return stats;
     }
@@ -502,11 +522,17 @@ public class AdminService {
         long totalStudents = studentRepository.count();
         long totalTeachers = teacherRepository.count();
         long totalAttendance = attendanceRepository.count();
+        long totalFaceProfiles = faceProfileRepository.count();
+        long totalSessions = attendanceSessionRepository.count();
+        long activeSessions = attendanceSessionRepository.findByActiveTrueOrderByStartedAtDesc().size();
         
         diagnostics.put("totalUsers", totalUsers);
         diagnostics.put("totalStudents", totalStudents);
         diagnostics.put("totalTeachers", totalTeachers);
         diagnostics.put("totalAttendanceRecords", totalAttendance);
+        diagnostics.put("totalFaceProfiles", totalFaceProfiles);
+        diagnostics.put("totalAttendanceSessions", totalSessions);
+        diagnostics.put("activeAttendanceSessions", activeSessions);
         
         // Get student info
         List<Student> students = studentRepository.findAll();
@@ -543,6 +569,19 @@ public class AdminService {
             attendanceSample.add(aInfo);
         });
         diagnostics.put("attendanceSample", attendanceSample);
+
+        List<AttendanceSession> sessions = attendanceSessionRepository.findAll();
+        List<Map<String, Object>> sessionInfo = new ArrayList<>();
+        sessions.stream().limit(5).forEach(session -> {
+            Map<String, Object> info = new HashMap<>();
+            info.put("id", session.getId());
+            info.put("sessionName", session.getSessionName());
+            info.put("className", session.getClassName());
+            info.put("sessionDate", session.getSessionDate());
+            info.put("active", session.getActive());
+            sessionInfo.add(info);
+        });
+        diagnostics.put("attendanceSessions", sessionInfo);
         
         return diagnostics;
     }

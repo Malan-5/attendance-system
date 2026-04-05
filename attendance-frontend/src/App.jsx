@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, Users, TrendingUp, MessageSquare, Award, BarChart3, PieChart, Download, Upload, AlertCircle } from 'lucide-react';
+import { Calendar, Users, TrendingUp, MessageSquare, Award, BarChart3, PieChart, Download, Upload, AlertCircle, Camera, Shield, Clock3, FileDown } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, PieChart as RePieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import CameraCapture from './CameraCapture.jsx'
 
 const API_BASE = 'http://localhost:8080/api';
+
+const toInputDate = (date = new Date()) => new Date(date).toISOString().split('T')[0]
 
 // Utility function for API calls
 const api = {
@@ -839,7 +842,7 @@ function MainApp({ currentUser, userRole, onLogout }) {
 
   const teacherTabs = ['dashboard', 'manage-students', 'mark-attendance', 'performance', 'low-attendance', 'messages'];
   const studentTabs = ['dashboard', 'my-attendance', 'chat-teacher', 'ai-scorecard', 'my-reports'];
-  const adminTabs = ['dashboard', 'teachers', 'students', 'attendance', 'reports', 'users', 'create-student', 'create-teacher'];
+  const adminTabs = ['dashboard', 'teachers', 'students', 'attendance', 'reports', 'users', 'face-registration', 'create-student', 'create-teacher'];
   const tabs = userRole === 'TEACHER' ? teacherTabs : userRole === 'ADMIN' ? adminTabs : studentTabs;
 
   return (
@@ -896,7 +899,7 @@ function MainApp({ currentUser, userRole, onLogout }) {
           <>
             {activeTab === 'dashboard' && <TeacherDashboard />}
             {activeTab === 'manage-students' && <ManageStudents />}
-            {activeTab === 'mark-attendance' && <TeacherMarkAttendance />}
+            {activeTab === 'mark-attendance' && <FaceAttendanceWorkbench currentUser={currentUser} />}
             {activeTab === 'performance' && <AIPerformanceAnalysis />}
             {activeTab === 'low-attendance' && <LowAttendanceAlert />}
             {activeTab === 'messages' && <MessageNotifications />}
@@ -907,8 +910,9 @@ function MainApp({ currentUser, userRole, onLogout }) {
             {activeTab === 'teachers' && <AdminTeachers />}
             {activeTab === 'students' && <AdminStudents />}
             {activeTab === 'attendance' && <AdminAttendance />}
-            {activeTab === 'reports' && <AdminReports />}
+            {activeTab === 'reports' && <DocumentAdminReports />}
             {activeTab === 'users' && <AdminUsers />}
+            {activeTab === 'face-registration' && <AdminFaceRegistration />}
             {activeTab === 'create-student' && <AdminCreateStudent />}
             {activeTab === 'create-teacher' && <AdminCreateTeacher />}
           </>
@@ -937,6 +941,10 @@ function LoginPortal({ onLogin }) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [useFaceLogin, setUseFaceLogin] = useState(false);
+  const [faceImage, setFaceImage] = useState('');
+
+  const supportsFaceLogin = loginType === 'teacher' || loginType === 'admin';
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -944,17 +952,25 @@ function LoginPortal({ onLogin }) {
     setLoading(true);
 
     try {
-      // Call real backend API
-      const response = await fetch(`${API_BASE}/auth/login`, {
+      if (useFaceLogin && !faceImage) {
+        setError('Capture or upload a face image before using face login.');
+        setLoading(false);
+        return;
+      }
+
+      const response = await fetch(useFaceLogin ? `${API_BASE}/auth/face-login` : `${API_BASE}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
+        body: JSON.stringify(
+          useFaceLogin
+            ? { email, imageData: faceImage }
+            : { email, password }
+        )
       });
       
       const data = await response.json();
 
       if (data.success && data.id) {
-        // Login successful
         onLogin(
           { id: data.id, email: data.email, name: data.name },
           data.role
@@ -970,13 +986,6 @@ function LoginPortal({ onLogin }) {
     }
   };
 
-  const toggleLoginType = () => {
-    setLoginType(loginType === 'teacher' ? 'student' : 'teacher');
-    setEmail('');
-    setPassword('');
-    setError('');
-  };
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center p-4">
       {/* Background decoration */}
@@ -984,7 +993,7 @@ function LoginPortal({ onLogin }) {
       <div className="absolute bottom-0 right-0 w-96 h-96 bg-purple-400 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse"></div>
 
       {/* Login Container */}
-      <div className="relative z-10 w-full max-w-md">
+      <div className="relative z-10 w-full max-w-4xl">
         {/* Logo/Header */}
         <div className="text-center mb-8">
           <div className="flex items-center justify-center space-x-2 mb-4">
@@ -999,7 +1008,13 @@ function LoginPortal({ onLogin }) {
           {/* Role Selector */}
           <div className="flex bg-gray-100 border-b">
             <button
-              onClick={() => !loading && setLoginType('teacher')}
+              onClick={() => {
+                if (loading) return;
+                setLoginType('teacher');
+                setUseFaceLogin(false);
+                setFaceImage('');
+                setError('');
+              }}
               className={`flex-1 py-4 font-semibold transition-colors text-sm ${
                 loginType === 'teacher'
                   ? 'bg-indigo-600 text-white'
@@ -1009,7 +1024,13 @@ function LoginPortal({ onLogin }) {
               👨‍🏫 Teacher
             </button>
             <button
-              onClick={() => !loading && setLoginType('student')}
+              onClick={() => {
+                if (loading) return;
+                setLoginType('student');
+                setUseFaceLogin(false);
+                setFaceImage('');
+                setError('');
+              }}
               className={`flex-1 py-4 font-semibold transition-colors text-sm ${
                 loginType === 'student'
                   ? 'bg-indigo-600 text-white'
@@ -1019,7 +1040,13 @@ function LoginPortal({ onLogin }) {
               👨‍🎓 Student
             </button>
             <button
-              onClick={() => !loading && setLoginType('admin')}
+              onClick={() => {
+                if (loading) return;
+                setLoginType('admin');
+                setUseFaceLogin(false);
+                setFaceImage('');
+                setError('');
+              }}
               className={`flex-1 py-4 font-semibold transition-colors text-sm ${
                 loginType === 'admin'
                   ? 'bg-purple-600 text-white'
@@ -1032,6 +1059,37 @@ function LoginPortal({ onLogin }) {
 
           {/* Login Form */}
           <form onSubmit={handleLogin} className="p-8 space-y-6">
+            {supportsFaceLogin && (
+              <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-indigo-900">Authentication Mode</p>
+                    <p className="text-xs text-indigo-700">Password login remains available and face login is optional.</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setUseFaceLogin(false)}
+                      className={`px-3 py-2 rounded-lg text-sm font-medium ${
+                        !useFaceLogin ? 'bg-indigo-600 text-white' : 'bg-white text-indigo-700 border border-indigo-200'
+                      }`}
+                    >
+                      Password
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setUseFaceLogin(true)}
+                      className={`px-3 py-2 rounded-lg text-sm font-medium ${
+                        useFaceLogin ? 'bg-indigo-600 text-white' : 'bg-white text-indigo-700 border border-indigo-200'
+                      }`}
+                    >
+                      Face Login
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Email Input */}
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">
@@ -1048,7 +1106,16 @@ function LoginPortal({ onLogin }) {
               />
             </div>
 
-            {/* Password Input */}
+            {useFaceLogin ? (
+              <CameraCapture
+                title="Face Login Capture"
+                buttonLabel="Capture Login Face"
+                previewImage={faceImage}
+                onCapture={setFaceImage}
+                compact
+                disabled={loading}
+              />
+            ) : (
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">
                 Password
@@ -1063,6 +1130,7 @@ function LoginPortal({ onLogin }) {
                 disabled={loading}
               />
             </div>
+            )}
 
             {/* Error Message */}
             {error && (
@@ -1073,6 +1141,11 @@ function LoginPortal({ onLogin }) {
 
             {/* Demo Credentials Info */}
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              {supportsFaceLogin && (
+                <p className="text-xs text-blue-700 mb-2">
+                  Face login works after a face profile has been registered for that teacher/admin account.
+                </p>
+              )}
               <p className="text-xs font-semibold text-blue-900 mb-2">Test Credentials:</p>
               <p className="text-xs text-blue-800">
                 {loginType === 'teacher' 
@@ -1089,7 +1162,7 @@ function LoginPortal({ onLogin }) {
               disabled={loading}
               className="w-full py-3 px-4 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white font-semibold rounded-lg hover:from-indigo-700 hover:to-indigo-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loading ? 'Logging in...' : 'Login'}
+              {loading ? 'Logging in...' : useFaceLogin ? 'Login With Face' : 'Login'}
             </button>
 
             {/* Or Divider */}
@@ -2212,7 +2285,7 @@ function AdminDashboard() {
       </div>
 
       {stats && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="bg-white rounded-lg shadow p-6 border-t-4 border-blue-500">
             <div className="flex justify-between items-center">
               <div>
@@ -2261,6 +2334,34 @@ function AdminDashboard() {
             <div>
               <p className="text-gray-600 text-sm font-semibold">Good Attendance</p>
               <p className="text-3xl font-bold text-green-600">{stats.goodAttendanceStudents}</p>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg shadow p-6 border-t-4 border-indigo-500">
+            <div>
+              <p className="text-gray-600 text-sm font-semibold">Registered Faces</p>
+              <p className="text-3xl font-bold text-indigo-600">{stats.registeredFaceProfiles}</p>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg shadow p-6 border-t-4 border-orange-500">
+            <div>
+              <p className="text-gray-600 text-sm font-semibold">Active Sessions</p>
+              <p className="text-3xl font-bold text-orange-600">{stats.activeAttendanceSessions}</p>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg shadow p-6 border-t-4 border-amber-500">
+            <div>
+              <p className="text-gray-600 text-sm font-semibold">Late Records</p>
+              <p className="text-3xl font-bold text-amber-600">{stats.lateRecords}</p>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg shadow p-6 border-t-4 border-rose-500">
+            <div>
+              <p className="text-gray-600 text-sm font-semibold">Absent Records</p>
+              <p className="text-3xl font-bold text-rose-600">{stats.absentRecords}</p>
             </div>
           </div>
         </div>
@@ -3562,6 +3663,893 @@ function MessageNotifications() {
             </div>
           </div>
         ))
+      )}
+    </div>
+  );
+}
+
+function FaceAttendanceWorkbench({ currentUser }) {
+  const [students, setStudents] = useState([]);
+  const [selectedDate, setSelectedDate] = useState(toInputDate());
+  const [selectedClass, setSelectedClass] = useState('');
+  const [bulkAction, setBulkAction] = useState('PRESENT');
+  const [lateAfterMinutes, setLateAfterMinutes] = useState(10);
+  const [sessionName, setSessionName] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [attendance, setAttendance] = useState({});
+  const [activeSession, setActiveSession] = useState(null);
+  const [scanPreview, setScanPreview] = useState('');
+  const [scanResult, setScanResult] = useState(null);
+  const [scanLog, setScanLog] = useState([]);
+
+  const loadStudentsAndAttendance = async () => {
+    try {
+      setLoading(true);
+      const [studentsData, attendanceData, activeSessions] = await Promise.all([
+        api.get('/students'),
+        api.get('/attendance'),
+        api.get('/attendance-sessions/active'),
+      ]);
+
+      setStudents(studentsData);
+
+      const classes = [...new Set(studentsData.map(student => student.className).filter(Boolean))];
+      const nextSelectedClass = selectedClass || classes[0] || '';
+      setSelectedClass(nextSelectedClass);
+
+      const dateAttendance = {};
+      attendanceData
+        .filter(record => record.attendanceDate === selectedDate)
+        .forEach(record => {
+          dateAttendance[record.studentId] = record.status;
+        });
+      setAttendance(dateAttendance);
+
+      const matchingSession = activeSessions.find(session => (
+        session.className === nextSelectedClass && session.sessionDate === selectedDate
+      ));
+      setActiveSession(matchingSession || null);
+      if (matchingSession && !sessionName) {
+        setSessionName(matchingSession.sessionName);
+      }
+    } catch (err) {
+      console.error(err);
+      setError('Failed to load the attendance workspace.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadStudentsAndAttendance();
+  }, [selectedDate, selectedClass]);
+
+  const classes = [...new Set(students.map(student => student.className).filter(Boolean))];
+  const filteredStudents = selectedClass
+    ? students.filter(student => student.className === selectedClass)
+    : students;
+
+  useEffect(() => {
+    if (!selectedClass && classes.length > 0) {
+      setSelectedClass(classes[0]);
+    }
+  }, [classes, selectedClass]);
+
+  useEffect(() => {
+    if (selectedClass && !sessionName) {
+      setSessionName(`${selectedClass} Face Attendance`);
+    }
+  }, [selectedClass, sessionName]);
+
+  const handleStatusChange = (studentId, status) => {
+    setAttendance({ ...attendance, [studentId]: status });
+  };
+
+  const handleBulkMarkAll = () => {
+    const updates = {};
+    filteredStudents.forEach(student => {
+      updates[student.id] = bulkAction;
+    });
+    setAttendance(prev => ({ ...prev, ...updates }));
+  };
+
+  const handleManualSubmit = async () => {
+    try {
+      setSaving(true);
+      setError('');
+      setSuccess('');
+
+      if (filteredStudents.length === 0) {
+        setError('No students are available for the selected class.');
+        return;
+      }
+
+      const attendanceData = filteredStudents.map(student => ({
+        studentId: student.id,
+        attendanceDate: selectedDate,
+        status: attendance[student.id] || 'ABSENT',
+        remarks: activeSession ? `Manual update during session #${activeSession.id}` : '',
+      }));
+
+      const response = await fetch(`${API_BASE}/attendance/batch`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(attendanceData)
+      });
+
+      if (!response.ok) {
+        const responseText = await response.text();
+        throw new Error(responseText || 'Batch attendance save failed');
+      }
+
+      const data = await response.json();
+      setSuccess(`Manual attendance saved successfully for ${data.length} records.`);
+      await loadStudentsAndAttendance();
+    } catch (err) {
+      console.error(err);
+      setError('Failed to save manual attendance.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleStartSession = async () => {
+    if (!selectedClass) {
+      setError('Choose a class before starting a face-attendance session.');
+      return;
+    }
+
+    try {
+      setSaving(true);
+      setError('');
+      const response = await api.post('/attendance-sessions', {
+        sessionName: sessionName || `${selectedClass} Face Attendance`,
+        className: selectedClass,
+        sessionDate: selectedDate,
+        lateAfterMinutes,
+        createdBy: currentUser?.name || 'Teacher',
+      });
+
+      setActiveSession(response);
+      setSuccess(`Attendance session started for ${selectedClass}.`);
+      setScanLog([]);
+      setScanResult(null);
+    } catch (err) {
+      console.error(err);
+      setError('Failed to start the face-attendance session.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCompleteSession = async () => {
+    if (!activeSession) return;
+
+    try {
+      setSaving(true);
+      const response = await api.post(`/attendance-sessions/${activeSession.id}/complete`, {});
+      setSuccess(`${response.message} ${response.absentMarked} student(s) marked absent automatically.`);
+      setActiveSession(null);
+      await loadStudentsAndAttendance();
+    } catch (err) {
+      console.error(err);
+      setError('Failed to complete the attendance session.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleFaceScan = async (imageData) => {
+    if (!activeSession) {
+      setError('Start an attendance session before scanning faces.');
+      return;
+    }
+
+    try {
+      setSaving(true);
+      setError('');
+      setScanPreview(imageData);
+      const response = await api.post(`/attendance-sessions/${activeSession.id}/scan`, { imageData });
+
+      if (response.matched) {
+        setAttendance(prev => ({ ...prev, [response.studentId]: response.attendanceStatus }));
+        setScanResult(response);
+        setScanLog(prev => [{
+          id: `${response.studentId}-${Date.now()}`,
+          name: response.name,
+          status: response.attendanceStatus,
+          confidence: response.confidence,
+          time: new Date().toLocaleTimeString(),
+        }, ...prev].slice(0, 8));
+        setSuccess(`${response.name} marked ${response.attendanceStatus}.`);
+      } else {
+        setScanResult(response);
+        setError(response.message || 'No matching face was found.');
+      }
+    } catch (err) {
+      console.error(err);
+      setError('Face scan failed.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) return <div className="text-center py-8">Loading face-attendance workspace...</div>;
+
+  return (
+    <div className="space-y-6">
+      {error && <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3">{error}</div>}
+      {success && <div className="bg-green-50 border border-green-200 text-green-700 rounded-lg px-4 py-3">{success}</div>}
+
+      <div className="flex items-center gap-3">
+        <Shield className="w-8 h-8 text-indigo-600" />
+        <div>
+          <h1 className="text-3xl font-bold text-gray-800">Face Attendance Workbench</h1>
+          <p className="text-sm text-gray-600">Run a live session, classify Present/Late automatically, and close the session to mark absentees.</p>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-xl shadow p-6 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
+        <div>
+          <label className="block text-sm font-semibold text-gray-700 mb-2">Class</label>
+          <select value={selectedClass} onChange={(e) => setSelectedClass(e.target.value)} className="w-full px-4 py-2 border rounded-lg">
+            {classes.map(className => (
+              <option key={className} value={className}>{className}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm font-semibold text-gray-700 mb-2">Date</label>
+          <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="w-full px-4 py-2 border rounded-lg" />
+        </div>
+        <div>
+          <label className="block text-sm font-semibold text-gray-700 mb-2">Session Name</label>
+          <input value={sessionName} onChange={(e) => setSessionName(e.target.value)} className="w-full px-4 py-2 border rounded-lg" />
+        </div>
+        <div>
+          <label className="block text-sm font-semibold text-gray-700 mb-2">Late Threshold (mins)</label>
+          <input
+            type="number"
+            min="1"
+            value={lateAfterMinutes}
+            onChange={(e) => setLateAfterMinutes(Number(e.target.value))}
+            className="w-full px-4 py-2 border rounded-lg"
+          />
+        </div>
+        <div className="flex items-end gap-3">
+          {activeSession ? (
+            <button
+              type="button"
+              onClick={handleCompleteSession}
+              disabled={saving}
+              className="w-full px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
+            >
+              Close Session
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={handleStartSession}
+              disabled={saving || !selectedClass}
+              className="w-full px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+            >
+              Start Face Session
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        <div className="xl:col-span-2 space-y-6">
+          {activeSession ? (
+            <CameraCapture
+              title={`Live Recognition • ${activeSession.className}`}
+              buttonLabel="Scan Student Face"
+              previewImage={scanPreview}
+              onCapture={handleFaceScan}
+              disabled={saving}
+            />
+          ) : (
+            <div className="bg-white rounded-xl shadow p-6 border border-dashed border-gray-300 text-center">
+              <Camera className="w-10 h-10 text-gray-400 mx-auto mb-3" />
+              <p className="font-semibold text-gray-800">No active session</p>
+              <p className="text-sm text-gray-600 mt-1">Start a session to enable live face recognition and automatic Present/Late marking.</p>
+            </div>
+          )}
+
+          <div className="bg-white rounded-xl shadow overflow-hidden">
+            <div className="px-6 py-4 bg-gray-50 border-b flex items-center justify-between">
+              <h3 className="font-semibold text-gray-800">Manual Attendance Controls</h3>
+              <span className="text-sm text-gray-500">{filteredStudents.length} student(s) in class</span>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="flex flex-wrap gap-3 items-center">
+                <select
+                  value={bulkAction}
+                  onChange={(e) => setBulkAction(e.target.value)}
+                  className="px-4 py-2 border rounded-lg"
+                >
+                  <option value="PRESENT">Mark All Present</option>
+                  <option value="ABSENT">Mark All Absent</option>
+                  <option value="LATE">Mark All Late</option>
+                </select>
+                <button type="button" onClick={handleBulkMarkAll} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                  Apply To Class
+                </button>
+                <button
+                  type="button"
+                  onClick={handleManualSubmit}
+                  disabled={saving}
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+                >
+                  {saving ? 'Saving...' : 'Save Manual Attendance'}
+                </button>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Roll No</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Name</th>
+                      <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {filteredStudents.map(student => (
+                      <tr key={student.id}>
+                        <td className="px-4 py-3 text-sm font-medium text-gray-900">{student.rollNo}</td>
+                        <td className="px-4 py-3 text-sm text-gray-700">{student.name}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex justify-center gap-2">
+                            {['PRESENT', 'LATE', 'ABSENT'].map(status => (
+                              <button
+                                key={status}
+                                type="button"
+                                onClick={() => handleStatusChange(student.id, status)}
+                                className={`px-3 py-1 rounded text-xs font-medium ${
+                                  attendance[student.id] === status
+                                    ? status === 'PRESENT'
+                                      ? 'bg-green-600 text-white'
+                                      : status === 'LATE'
+                                      ? 'bg-yellow-500 text-white'
+                                      : 'bg-red-600 text-white'
+                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                }`}
+                              >
+                                {status}
+                              </button>
+                            ))}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-6">
+          <div className="bg-white rounded-xl shadow p-6">
+            <div className="flex items-center gap-2 mb-4">
+              <Clock3 className="w-5 h-5 text-indigo-600" />
+              <h3 className="font-semibold text-gray-800">Session Status</h3>
+            </div>
+            {activeSession ? (
+              <div className="space-y-3 text-sm">
+                <p><span className="font-semibold">Session:</span> {activeSession.sessionName}</p>
+                <p><span className="font-semibold">Class:</span> {activeSession.className}</p>
+                <p><span className="font-semibold">Date:</span> {activeSession.sessionDate}</p>
+                <p><span className="font-semibold">Late After:</span> {activeSession.lateAfterMinutes} min</p>
+                <p><span className="font-semibold">Recognized:</span> {activeSession.recognizedCount}</p>
+              </div>
+            ) : (
+              <p className="text-sm text-gray-600">Start a session to begin live face recognition.</p>
+            )}
+          </div>
+
+          <div className="bg-white rounded-xl shadow p-6">
+            <h3 className="font-semibold text-gray-800 mb-4">Latest Scan Result</h3>
+            {scanResult ? (
+              <div className={`rounded-xl p-4 border ${scanResult.matched ? 'bg-green-50 border-green-200' : 'bg-amber-50 border-amber-200'}`}>
+                <p className="font-semibold text-gray-800">{scanResult.name || 'No Match'}</p>
+                <p className="text-sm text-gray-600 mt-1">{scanResult.message}</p>
+                {scanResult.matched && (
+                  <div className="mt-3 text-sm text-gray-700 space-y-1">
+                    <p>Status: <span className="font-semibold">{scanResult.attendanceStatus}</span></p>
+                    <p>Confidence: <span className="font-semibold">{scanResult.confidence}%</span></p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-600">No scan has been processed yet.</p>
+            )}
+          </div>
+
+          <div className="bg-white rounded-xl shadow overflow-hidden">
+            <div className="px-6 py-4 bg-gray-50 border-b">
+              <h3 className="font-semibold text-gray-800">Recognition Log</h3>
+            </div>
+            {scanLog.length === 0 ? (
+              <div className="p-6 text-sm text-gray-500">Successful scans will appear here.</div>
+            ) : (
+              <div className="divide-y">
+                {scanLog.map(item => (
+                  <div key={item.id} className="p-4">
+                    <div className="flex items-center justify-between">
+                      <p className="font-semibold text-gray-800">{item.name}</p>
+                      <span className="text-xs text-gray-500">{item.time}</span>
+                    </div>
+                    <div className="flex items-center justify-between mt-2 text-sm">
+                      <span className={`px-2 py-1 rounded-full ${
+                        item.status === 'PRESENT'
+                          ? 'bg-green-50 text-green-700'
+                          : item.status === 'LATE'
+                          ? 'bg-yellow-50 text-yellow-700'
+                          : 'bg-red-50 text-red-700'
+                      }`}>
+                        {item.status}
+                      </span>
+                      <span className="text-gray-600">{item.confidence}% confidence</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AdminFaceRegistration() {
+  const [users, setUsers] = useState([]);
+  const [profiles, setProfiles] = useState([]);
+  const [selectedUserId, setSelectedUserId] = useState('');
+  const [roleFilter, setRoleFilter] = useState('ALL');
+  const [samples, setSamples] = useState([]);
+  const [previewImage, setPreviewImage] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
+
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      const [usersData, profilesData] = await Promise.all([
+        api.get('/admin/users'),
+        api.get('/faces/profiles'),
+      ]);
+      setUsers(usersData);
+      setProfiles(profilesData);
+    } catch (err) {
+      console.error(err);
+      setError('Failed to load users or face profiles.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const selectedUser = users.find(user => String(user.id) === selectedUserId);
+  const existingProfile = profiles.find(profile => profile.userId === Number(selectedUserId));
+  const filteredUsers = users.filter(user => roleFilter === 'ALL' || user.role === roleFilter);
+
+  const handleCapture = (imageData) => {
+    setPreviewImage(imageData);
+    setSamples(prev => [...prev, imageData].slice(-3));
+    setMessage('');
+    setError('');
+  };
+
+  const handleRegister = async () => {
+    if (!selectedUserId) {
+      setError('Choose a user before registering a face profile.');
+      return;
+    }
+    if (samples.length === 0) {
+      setError('Capture at least one image before saving.');
+      return;
+    }
+
+    try {
+      setSaving(true);
+      setError('');
+      const response = await api.post('/faces/register', {
+        userId: Number(selectedUserId),
+        imageSamples: samples,
+      });
+
+      if (response.success) {
+        setMessage(`Face profile saved for ${response.name}.`);
+        setSamples([]);
+        setPreviewImage('');
+        await loadData();
+      } else {
+        setError(response.message || 'Failed to save face profile.');
+      }
+    } catch (err) {
+      console.error(err);
+      setError('Failed to save face profile.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteProfile = async (profileId) => {
+    if (!window.confirm('Delete this face profile?')) return;
+
+    try {
+      await fetch(`${API_BASE}/faces/profiles/${profileId}`, { method: 'DELETE' });
+      setMessage('Face profile deleted.');
+      await loadData();
+    } catch (err) {
+      console.error(err);
+      setError('Failed to delete face profile.');
+    }
+  };
+
+  if (loading) {
+    return <div className="text-center py-8">Loading face registration module...</div>;
+  }
+
+  return (
+    <div className="space-y-6">
+      {error && <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3">{error}</div>}
+      {message && <div className="bg-green-50 border border-green-200 text-green-700 rounded-lg px-4 py-3">{message}</div>}
+
+      <div className="flex items-center gap-3">
+        <Camera className="w-8 h-8 text-indigo-600" />
+        <div>
+          <h1 className="text-3xl font-bold text-gray-800">Face Registration</h1>
+          <p className="text-sm text-gray-600">Register or update face profiles for students, teachers, and admins.</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        <div className="xl:col-span-1 bg-white rounded-xl shadow p-6 space-y-4">
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">Filter By Role</label>
+            <select
+              value={roleFilter}
+              onChange={(e) => setRoleFilter(e.target.value)}
+              className="w-full px-4 py-2 border rounded-lg"
+            >
+              <option value="ALL">All Roles</option>
+              <option value="STUDENT">Students</option>
+              <option value="TEACHER">Teachers</option>
+              <option value="ADMIN">Admins</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">Select User</label>
+            <select
+              value={selectedUserId}
+              onChange={(e) => {
+                setSelectedUserId(e.target.value);
+                setSamples([]);
+                setPreviewImage('');
+                setMessage('');
+                setError('');
+              }}
+              className="w-full px-4 py-2 border rounded-lg"
+            >
+              <option value="">Choose a user...</option>
+              {filteredUsers.map(user => (
+                <option key={user.id} value={user.id}>
+                  {user.name} ({user.role})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {selectedUser && (
+            <div className="bg-indigo-50 rounded-xl p-4 border border-indigo-100 space-y-2">
+              <p className="font-semibold text-indigo-900">{selectedUser.name}</p>
+              <p className="text-sm text-indigo-800">{selectedUser.email}</p>
+              <p className="text-xs text-indigo-700">Role: {selectedUser.role}</p>
+              {existingProfile ? (
+                <div className="text-xs text-green-700 bg-green-50 border border-green-100 rounded-lg px-3 py-2">
+                  Existing profile found with {existingProfile.sampleCount} sample(s). Saving again will replace it.
+                </div>
+              ) : (
+                <div className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+                  No face profile registered yet.
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="bg-gray-50 rounded-xl p-4 border border-gray-200">
+            <p className="text-sm font-semibold text-gray-800 mb-2">Capture Guidance</p>
+            <p className="text-sm text-gray-600">Take 1 to 3 front-facing captures. More samples improve matching consistency.</p>
+            <p className="text-sm text-gray-600 mt-2">Current capture buffer: {samples.length} / 3</p>
+          </div>
+        </div>
+
+        <div className="xl:col-span-2 space-y-6">
+          <CameraCapture
+            title="Register Face Profile"
+            buttonLabel="Capture Face Sample"
+            previewImage={previewImage}
+            onCapture={handleCapture}
+            disabled={saving || !selectedUserId}
+          />
+
+          <div className="bg-white rounded-xl shadow p-6 flex flex-wrap gap-3 items-center justify-between">
+            <div>
+              <p className="font-semibold text-gray-800">Ready to save this profile?</p>
+              <p className="text-sm text-gray-600">The latest three captured images will be used to build the face signature.</p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setSamples([]);
+                  setPreviewImage('');
+                }}
+                className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+              >
+                Reset Captures
+              </button>
+              <button
+                type="button"
+                onClick={handleRegister}
+                disabled={saving || !selectedUserId || samples.length === 0}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+              >
+                {saving ? 'Saving...' : existingProfile ? 'Update Face Profile' : 'Save Face Profile'}
+              </button>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl shadow overflow-hidden">
+            <div className="px-6 py-4 border-b bg-gray-50 flex items-center justify-between">
+              <h3 className="font-semibold text-gray-800">Registered Face Profiles</h3>
+              <span className="text-sm text-gray-500">{profiles.length} total</span>
+            </div>
+            {profiles.length === 0 ? (
+              <div className="p-6 text-gray-500 text-center">No face profiles registered yet.</div>
+            ) : (
+              <div className="divide-y">
+                {profiles.map(profile => (
+                  <div key={profile.id} className="p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                    <div className="flex items-center gap-4">
+                      <div className="w-16 h-16 rounded-xl bg-gray-100 overflow-hidden border">
+                        {profile.sampleImageData ? (
+                          <img src={profile.sampleImageData} alt={profile.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-gray-400">N/A</div>
+                        )}
+                      </div>
+                      <div>
+                        <p className="font-semibold text-gray-800">{profile.name}</p>
+                        <p className="text-sm text-gray-600">{profile.email}</p>
+                        <p className="text-xs text-gray-500">
+                          {profile.role}{profile.className ? ` • ${profile.className}` : ''} • {profile.sampleCount} sample(s)
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs text-gray-500">
+                        Last matched: {profile.lastMatchedAt ? new Date(profile.lastMatchedAt).toLocaleString() : 'Never'}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteProfile(profile.id)}
+                        className="px-3 py-2 text-sm bg-red-50 text-red-700 border border-red-200 rounded-lg hover:bg-red-100"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DocumentAdminReports() {
+  const [scope, setScope] = useState('daily');
+  const [reportDate, setReportDate] = useState(toInputDate());
+  const [report, setReport] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  const getRange = () => {
+    const selected = new Date(reportDate);
+    const start = new Date(selected);
+    const end = new Date(selected);
+
+    if (scope === 'weekly') {
+      const day = selected.getDay();
+      const diff = (day + 6) % 7;
+      start.setDate(selected.getDate() - diff);
+      end.setDate(start.getDate() + 6);
+    }
+
+    if (scope === 'monthly') {
+      start.setDate(1);
+      end.setMonth(start.getMonth() + 1, 0);
+    }
+
+    return {
+      startDate: toInputDate(start),
+      endDate: toInputDate(end),
+    };
+  };
+
+  useEffect(() => {
+    const fetchReport = async () => {
+      try {
+        setLoading(true);
+        setError('');
+
+        let data;
+        if (scope === 'daily') {
+          data = await api.get(`/reports/daily?date=${reportDate}`);
+        } else if (scope === 'weekly') {
+          data = await api.get(`/reports/weekly?date=${reportDate}`);
+        } else {
+          const selected = new Date(reportDate);
+          data = await api.get(`/reports/monthly?year=${selected.getFullYear()}&month=${selected.getMonth() + 1}`);
+        }
+
+        setReport(data);
+      } catch (err) {
+        console.error(err);
+        setError('Failed to load the requested report.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchReport();
+  }, [scope, reportDate]);
+
+  const exportReport = () => {
+    const { startDate, endDate } = getRange();
+    window.open(`${API_BASE}/reports/export?startDate=${startDate}&endDate=${endDate}`, '_blank');
+  };
+
+  if (loading) return <div className="text-center py-8">Loading report module...</div>;
+
+  return (
+    <div className="space-y-6">
+      {error && <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3">{error}</div>}
+
+      <div className="flex items-center justify-between flex-wrap gap-4">
+        <div className="flex items-center gap-3">
+          <FileDown className="w-8 h-8 text-indigo-600" />
+          <div>
+            <h1 className="text-3xl font-bold text-gray-800">Report Generation</h1>
+            <p className="text-sm text-gray-600">Generate daily, weekly, and monthly attendance summaries with export support.</p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={exportReport}
+          className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+        >
+          Export CSV
+        </button>
+      </div>
+
+      <div className="bg-white rounded-xl shadow p-6 flex flex-wrap gap-4 items-end">
+        <div>
+          <label className="block text-sm font-semibold text-gray-700 mb-2">Report Scope</label>
+          <select value={scope} onChange={(e) => setScope(e.target.value)} className="px-4 py-2 border rounded-lg">
+            <option value="daily">Daily</option>
+            <option value="weekly">Weekly</option>
+            <option value="monthly">Monthly</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm font-semibold text-gray-700 mb-2">Reference Date</label>
+          <input
+            type="date"
+            value={reportDate}
+            onChange={(e) => setReportDate(e.target.value)}
+            className="px-4 py-2 border rounded-lg"
+          />
+        </div>
+        {report && (
+          <div className="text-sm text-gray-600">
+            Range: <span className="font-medium">{report.startDate}</span> to <span className="font-medium">{report.endDate}</span>
+          </div>
+        )}
+      </div>
+
+      {report && (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="bg-white rounded-xl shadow p-6 border-l-4 border-green-500">
+              <p className="text-sm text-gray-600">Present</p>
+              <p className="text-3xl font-bold text-green-600">{report.presentCount}</p>
+            </div>
+            <div className="bg-white rounded-xl shadow p-6 border-l-4 border-yellow-500">
+              <p className="text-sm text-gray-600">Late</p>
+              <p className="text-3xl font-bold text-yellow-600">{report.lateCount}</p>
+            </div>
+            <div className="bg-white rounded-xl shadow p-6 border-l-4 border-red-500">
+              <p className="text-sm text-gray-600">Absent</p>
+              <p className="text-3xl font-bold text-red-600">{report.absentCount}</p>
+            </div>
+            <div className="bg-white rounded-xl shadow p-6 border-l-4 border-indigo-500">
+              <p className="text-sm text-gray-600">Attendance Rate</p>
+              <p className="text-3xl font-bold text-indigo-600">{report.attendanceRate}%</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            <div className="bg-white rounded-xl shadow overflow-hidden">
+              <div className="px-6 py-4 bg-gray-50 border-b">
+                <h3 className="font-semibold text-gray-800">Class Breakdown</h3>
+              </div>
+              {report.classBreakdown?.length ? (
+                <div className="divide-y">
+                  {report.classBreakdown.map(item => (
+                    <div key={item.className} className="p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="font-semibold text-gray-800">{item.className}</p>
+                        <span className="text-sm text-indigo-600 font-medium">{item.attendanceRate}%</span>
+                      </div>
+                      <div className="grid grid-cols-3 gap-3 text-sm text-gray-600">
+                        <p>Present: {item.presentCount}</p>
+                        <p>Late: {item.lateCount}</p>
+                        <p>Absent: {item.absentCount}</p>
+                      </div>
+                      <div className="w-full h-2 bg-gray-100 rounded-full mt-3">
+                        <div className="h-2 bg-indigo-600 rounded-full" style={{ width: `${item.attendanceRate}%` }}></div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-6 text-center text-gray-500">No attendance records found for this range.</div>
+              )}
+            </div>
+
+            <div className="bg-white rounded-xl shadow overflow-hidden">
+              <div className="px-6 py-4 bg-gray-50 border-b">
+                <h3 className="font-semibold text-gray-800">Low Attendance Watchlist</h3>
+              </div>
+              {report.lowAttendanceStudents?.length ? (
+                <div className="divide-y">
+                  {report.lowAttendanceStudents.map(student => (
+                    <div key={student.studentId} className="p-4 flex items-center justify-between gap-3">
+                      <div>
+                        <p className="font-semibold text-gray-800">{student.name}</p>
+                        <p className="text-sm text-gray-600">{student.rollNo} • {student.className}</p>
+                      </div>
+                      <span className="px-3 py-1 rounded-full bg-red-50 text-red-700 border border-red-200 text-sm font-medium">
+                        {student.attendancePercentage ?? 0}%
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-6 text-center text-gray-500">No students are currently below the 75% threshold.</div>
+              )}
+            </div>
+          </div>
+        </>
       )}
     </div>
   );

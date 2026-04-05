@@ -19,16 +19,7 @@ public class AuthService {
         Optional<User> user = userRepository.findByEmailAndPassword(request.getEmail(), request.getPassword());
         
         if (user.isPresent()) {
-            User loggedInUser = user.get();
-            return new LoginResponse(
-                loggedInUser.getId(),
-                loggedInUser.getName(),
-                loggedInUser.getEmail(),
-                loggedInUser.getRole().toString(),
-                generateToken(loggedInUser),
-                true,
-                "Login successful"
-            );
+            return createLoginResponse(user.get(), "Login successful");
         }
         
         return new LoginResponse(
@@ -50,6 +41,18 @@ public class AuthService {
     
     public Optional<User> getUserByEmail(String email) {
         return userRepository.findByEmail(email);
+    }
+
+    public LoginResponse createLoginResponse(User user, String message) {
+        return new LoginResponse(
+            user.getId(),
+            user.getName(),
+            user.getEmail(),
+            user.getRole().toString(),
+            generateToken(user),
+            true,
+            message
+        );
     }
     
     private String generateToken(User user) {
